@@ -1,0 +1,282 @@
+---
+title: "Finanical Aid and 1st Fall Probation"
+author: "Di Chen"
+output: html_document
+---
+<style type="text/css">
+
+
+h1 { /* Header 1 */
+ font-size: 15px;
+ color: DarkBlue;
+}
+
+
+</style>
+
+```{r setup, cache = F, echo = F, message = F, warning = F, tidy = F, results='hide'}
+# make this an external chunk that can be included in any file
+library(knitr)
+options(width = 100)
+opts_chunk$set(message = F, error = F, warning = F, comment = NA, fig.align = 'center', dpi = 100, tidy = F, cache.path = '.cache/', fig.path = 'fig/')
+
+options(xtable.type = 'html')
+knit_hooks$set(inline = function(x) {
+  if(is.numeric(x)) {
+    round(x, getOption('digits'))
+  } else {
+    paste(as.character(x), collapse = ', ')
+  }
+})
+knit_hooks$set(plot = knitr:::hook_plot_html)
+runif(1)
+```
+
+<br/>
+<br/>
+
+#### Probation Outcome Descriptive Summaries
+Population includes a total of 46,905 First-time freshmen from entering cohort 2010 through 2015. Proabtion at 1st Fall is defined by the academic status at the end of the 1st Fall term with either one of 'PROB'/'FINL'/'RECS'/'DISM'.
+The overall probation rate at 1st fall varies from 8.4% to 10.4% by cohorts.
+
+```{r, echo=F}
+library(dplyr)
+library(pander)
+library(Gmisc)
+library(tidyr)
+load("S:/Institutional Research/Chen/Sekhar Request/FA Influence on Student Sucess/PAG.Rda")
+
+PAG <- PAG.1 %>% mutate(PROB1= as.factor(ifelse(ACDMC_STATUS_END_FS1=='GOOD', 'N', 'Y')))
+
+PAG$PROB1 <- relevel(PAG$PROB1, ref = 'Y')
+
+getT1Stat <- function(varname, digits=1){
+        getDescriptionStatsBy(PAG[, varname], 
+                              PAG$COHORT, 
+                              add_total_col=TRUE,
+                              show_all_values=TRUE, 
+                              hrzl_prop=F,
+                              statistics=F, 
+                              html=TRUE, 
+                              digits=digits)
+}
+
+
+table_data <- list()
+
+table_data[["PROB 1st Fall"]] <- getT1Stat("PROB1")
+
+rgroup <- c()
+n.rgroup <- c()
+output_data <- NULL
+for (varlabel in names(table_data)){
+        output_data <- rbind(output_data, 
+                             table_data[[varlabel]])
+        rgroup <- c(rgroup, 
+                    varlabel)
+        n.rgroup <- c(n.rgroup, 
+                      nrow(table_data[[varlabel]]))
+}
+
+htmlTable(output_data, align="rrrr",
+          rgroup=rgroup, n.rgroup=n.rgroup, 
+          rgroupCSSseparator="   ", 
+          
+          rowlabel=" ", 
+          caption="First-time undergraduates entering cohort probation rate ", 
+          tfoot=" ", 
+          ctable=TRUE)
+
+```
+
+
+
+
+<br/>
+
+#### Finanical Aid Variables Summaries
+The logic to pull Financial Aid data is provided by Office of Financial Aid. The Data was pull on 1-12-2017. The loan and cost amounts reflect the sum of the student's finanical aid within the timeframe without breaking down by student level or degrees (E.g for student working on mutliple levels/degrees who entered at 2014, it reflect the sum of the FA amount within FS14,SS15,US15 for working on all levels including levels other than undergraduates). 
+
+ + Need-based Institutional Aid : Descriptively,probation students have been offered with higher amount of Need based institutional aid compared to non-probation students. It is true for all MSU calculated GPA (predict GPA) groups.
+ 
+```{r,echo=F}
+library(ggplot2)
+library(caret)
+library(Hmisc)
+library(dplyr)
+library(reshape2)
+library(pander)
+
+PAG$PREDGPAgrp <- as.factor( ifelse(is.na(PAG$PRED_GPA), 'Unknown',cut2(PAG$PRED_GPA,g=4)) )
+
+levels(PAG$PREDGPAgrp)[1:4] <- levels(cut2(PAG$PRED_GPA,g=4))
+
+ag <- PAG %>% mutate(miss= ifelse(is.na(IA.Need), 100,0))%>% group_by(PROB1,PREDGPAgrp) %>% summarise(headcount=n(),
+                                                       mean=mean(IA.Need, na.rm=T),
+                                                       sd= sd(IA.Need, na.rm=T),
+                                                       median=median(IA.Need, na.rm=T),
+                                                       percentile25= quantile(IA.Need,p=0.25, na.rm=T),
+                                                       percentile75= quantile(IA.Need,p=0.75, na.rm=T),
+                                                       missPercent =mean(miss))
+PAG$total <- ' Total'
+agt <- PAG %>% mutate(miss= ifelse(is.na(IA.Need), 100,0))%>% group_by(PROB1,total) %>% summarise(headcount=n(),
+                                                       mean=mean(IA.Need, na.rm=T),
+                                                       sd= sd(IA.Need, na.rm=T),
+                                                       median=median(IA.Need, na.rm=T),
+                                                       percentile25= quantile(IA.Need,p=0.25, na.rm=T),
+                                                       percentile75= quantile(IA.Need,p=0.75, na.rm=T),
+                                                       missPercent =mean(miss))
+names(agt) <- names(ag)
+ag <- rbind(agt, ag)
+
+ag <- melt(ag, id.vars = c('PROB1', 'PREDGPAgrp'))
+ag$value <- round(ag$value)
+
+ag <- dcast(ag, PREDGPAgrp+variable ~ PROB1)
+names(ag) <- c('Predict GPA group', 'Statistics', 'PROB:Y', 'PROB-N')
+pander(ag,caption ='Summary Statistics of Need Based Institutional Aid by Probation Status and Predict GPA Group')
+
+qplot(IA.Need, colour=PROB1, data=PAG, geom = "density",main='Need-Based IA by probation status')
+
+
+
+g1 <- qplot(IA.Need, colour=PROB1, data=PAG, geom = "density",main='Need-Based IA by probation status and MSU calculated GPA quantitle')
+g1 + facet_grid(.~PREDGPAgrp)
+```
+ 
+ <br/>
+ <br/>
+ <br/>
+ <br/>
+ 
+ 
+ + Non-Need based Institutional Aid including both merit based awards and things like employee tuition assistence etc. Overall only less than 25 percent of students who filed FAFSA and did receive Non-Need based Institutional Aid (75 percentile is 0). Descriptively, Non-Probation population were offered higher amount of Non-Need based Institutional Aid compared to probation students. 
+ 
+  
+```{r,echo=F}
+
+
+ag <- PAG %>% mutate(miss= ifelse(is.na(IA.Other), 100,0))%>% group_by(PROB1,PREDGPAgrp) %>% summarise(headcount=n(),
+                                                       mean=mean(IA.Other, na.rm=T),
+                                                       sd= sd(IA.Other, na.rm=T),
+                                                       median=median(IA.Other, na.rm=T),
+                                                       percentile25= quantile(IA.Other,p=0.25, na.rm=T),
+                                                       percentile75= quantile(IA.Other,p=0.75, na.rm=T),
+                                                       missPercent =mean(miss))
+
+agt <- PAG %>% mutate(miss= ifelse(is.na(IA.Other), 100,0))%>% group_by(PROB1,total) %>% summarise(headcount=n(),
+                                                       mean=mean(IA.Other, na.rm=T),
+                                                       sd= sd(IA.Other, na.rm=T),
+                                                       median=median(IA.Other, na.rm=T),
+                                                       percentile25= quantile(IA.Other,p=0.25, na.rm=T),
+                                                       percentile75= quantile(IA.Other,p=0.75, na.rm=T),
+                                                       missPercent =mean(miss))
+names(agt) <- names(ag)
+ag <- rbind(agt, ag)
+
+ag <- melt(ag, id.vars = c('PROB1', 'PREDGPAgrp'))
+ag$value <- round(ag$value)
+
+ag <- dcast(ag, PREDGPAgrp+variable ~ PROB1)
+names(ag) <- c('Predict GPA group', 'Statistics', 'PROB:Y', 'PROB-N')
+pander(ag,caption ='Summary Statistics of Non Need Based Institutional Aid by Probation Status and Predict GPA Group')
+
+#qplot(IA.Other, colour=PROB1, data=PAG, geom = "density",main='Non-Need-Based IA by probation status')
+
+
+
+#g1 <- qplot(IA.Other, colour=PROB1, data=PAG, geom = "density",main='Non-Need-Based IA by probation status and MSU calculated GPA quantitle')
+#g1 + facet_grid(.~PREDGPAgrp)
+```
+ 
+ 
+ <br/>
+ <br/>
+ <br/>
+ <br/>
+ 
+ + Total loans borrowed including Stafford, Perkins, Grad.Plus,Private loans, and Parent Debt (Parent.Plus).Descriptively, there is not much differences with regard to the money borrowed among probation vs. non-probation students overall. For those within 75th percentile predictive GPA range which is between 3.27 to 4.59, those who went on probation after 1st Fall borrowed more loans than non-probation students.
+   
+```{r,echo=F}
+
+ag <- PAG %>% mutate(miss= ifelse(is.na(tdebt), 100,0))%>% group_by(PROB1,PREDGPAgrp) %>% summarise(headcount=n(),
+                                                       mean=mean(tdebt, na.rm=T),
+                                                       sd= sd(tdebt, na.rm=T),
+                                                       median=median(tdebt, na.rm=T),
+                                                       percentile25= quantile(tdebt,p=0.25, na.rm=T),
+                                                       percentile75= quantile(tdebt,p=0.75, na.rm=T),
+                                                       missPercent =mean(miss))
+
+agt <- PAG %>% mutate(miss= ifelse(is.na(tdebt), 100,0))%>% group_by(PROB1,total) %>% summarise(headcount=n(),
+                                                       mean=mean(tdebt, na.rm=T),
+                                                       sd= sd(tdebt, na.rm=T),
+                                                       median=median(tdebt, na.rm=T),
+                                                       percentile25= quantile(tdebt,p=0.25, na.rm=T),
+                                                       percentile75= quantile(tdebt,p=0.75, na.rm=T),
+                                                       missPercent =mean(miss))
+names(agt) <- names(ag)
+ag <- rbind(agt, ag)
+
+ag <- melt(ag, id.vars = c('PROB1', 'PREDGPAgrp'))
+ag$value <- round(ag$value)
+
+ag <- dcast(ag, PREDGPAgrp+variable ~ PROB1)
+names(ag) <- c('Predict GPA group', 'Statistics', 'PROB:Y', 'PROB-N')
+pander(ag,caption ='Summary Statistics of total debt by Probation Status and Predict GPA Group')
+
+qplot(tdebt, colour=PROB1, data=PAG, geom = "density",main='total debt by probation status')
+
+
+
+g1 <- qplot(tdebt, colour=PROB1, data=PAG, geom = "density",main='total debt by probation status and MSU calculated GPA quantitle')
+g1 + facet_grid(.~PREDGPAgrp)
+```
+ 
+  <br/>
+ <br/>
+ <br/>
+ <br/>
+ 
+ + Net Price: Net Price = Cost of attendence - Expected Family Contribution (EFC) - total Gift Aid paid. We think this is close to a representation of students' finanical burden. For students who did not apply for aid, we don't have a net price estimate on them. If students' EFC or total Gift Aid paid amount exceeds their cost of attendence, the amount of Net Price is negative. The net price data is higly left skewed. There is not much differences with regard to its distribution among predict GPA groups. Descriptively, probation population has higher amount of net price compared to non-probation population, which is true across all predict GPA groups.
+ 
+ 
+ 
+ 
+ 
+ 
+
+
+```{r,echo=F}
+
+ag <- PAG %>% mutate(miss= ifelse(is.na(Netprice), 100,0))%>% group_by(PROB1,PREDGPAgrp) %>% summarise(headcount=n(),
+                                                       mean=mean(Netprice, na.rm=T),
+                                                       sd= sd(Netprice, na.rm=T),
+                                                       median=median(Netprice, na.rm=T),
+                                                       percentile25= quantile(Netprice,p=0.25, na.rm=T),
+                                                       percentile75= quantile(Netprice,p=0.75, na.rm=T),
+                                                       missPercent =mean(miss))
+
+agt <- PAG %>% mutate(miss= ifelse(is.na(Netprice), 100,0))%>% group_by(PROB1,total) %>% summarise(headcount=n(),
+                                                       mean=mean(Netprice, na.rm=T),
+                                                       sd= sd(Netprice, na.rm=T),
+                                                       median=median(Netprice, na.rm=T),
+                                                       percentile25= quantile(Netprice,p=0.25, na.rm=T),
+                                                       percentile75= quantile(Netprice,p=0.75, na.rm=T),
+                                                       missPercent =mean(miss))
+names(agt) <- names(ag)
+ag <- rbind(agt, ag)
+
+ag <- melt(ag, id.vars = c('PROB1', 'PREDGPAgrp'))
+ag$value <- round(ag$value)
+
+ag <- dcast(ag, PREDGPAgrp+variable ~ PROB1)
+names(ag) <- c('Predict GPA group', 'Statistics', 'PROB:Y', 'PROB-N')
+pander(ag,caption ='Summary Statistics of Net Price by Probation Status and Predict GPA Group')
+
+qplot(Netprice, colour=PROB1, data=PAG, geom = "density",main='Net Price by probation status')
+
+
+
+g1 <- qplot(Netprice, colour=PROB1, data=PAG, geom = "density",main='Net Price by probation status and MSU calculated GPA quantitle')
+g1 + facet_grid(.~PREDGPAgrp)
+```
